@@ -1,0 +1,58 @@
+#pragma kernel CSMain
+
+RWStructuredBuffer<float> densityBuffer;
+RWStructuredBuffer<float3> velocityBuffer;
+
+int gridSize;
+float viscosity;
+
+[numthreads(8, 8, 8)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= gridSize || id.y >= gridSize || id.z >= gridSize) return;
+
+    // Placeholder for Collision Step
+    CollisionStep(id);
+
+    // Placeholder for Streaming Step
+    StreamingStep(id);
+}
+
+float3 equilibriumDistribution(float density, float3 velocity, float3 direction)
+{
+    float uDotD = dot(velocity, direction);
+    float uSquared = dot(velocity, velocity);
+    return density * (1.0 + 3.0 * uDotD + 4.5 * uDotD * uDotD - 1.5 * uSquared);
+}
+
+void CollisionStep(uint3 id)
+{
+    int index = id.x + id.y * gridSize + id.z * gridSize * gridSize;
+
+    float currentDensity = densityBuffer[index];
+    float3 currentVelocity = velocityBuffer[index];
+
+    float3 direction = float3(1, 0, 0); // Example direction, add more for actual LBM
+
+    float3 equilibrium = equilibriumDistribution(currentDensity, currentVelocity, direction);
+
+    // Update velocity with relaxation (BGK approximation)
+    currentVelocity = (1.0 - viscosity) * currentVelocity + viscosity * equilibrium;
+
+    // Store updated velocity back to buffer
+    velocityBuffer[index] = currentVelocity;
+}
+
+void StreamingStep(uint3 id)
+{
+    int index = id.x + id.y * gridSize + id.z * gridSize * gridSize;
+
+    float3 streamedVelocity = velocityBuffer[index];
+
+    uint3 neighbor = id + uint3(1, 0, 0); // Example neighbor cell for streaming
+    if (neighbor.x < gridSize)
+    {
+        int neighborIndex = neighbor.x + neighbor.y * gridSize + neighbor.z * gridSize * gridSize;
+        velocityBuffer[neighborIndex] = streamedVelocity;
+    }
+}
