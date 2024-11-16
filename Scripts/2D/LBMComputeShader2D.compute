@@ -1,0 +1,47 @@
+#pragma kernel CSMain
+
+RWStructuredBuffer<float> densityBuffer; // Density buffer for each grid cell
+RWStructuredBuffer<float2> velocityBuffer; // Velocity buffer for each grid cell
+
+int gridSize;
+float viscosity;
+
+[numthreads(8, 8, 1)] // 2D thread group
+void CSMain(uint2 id : SV_DispatchThreadID)
+{
+    if (id.x >= gridSize || id.y >= gridSize) return;
+
+    int index = id.x + id.y * gridSize;
+
+    // Fetch the current density and velocity
+    float density = densityBuffer[index];
+    float2 velocity = velocityBuffer[index];
+
+    // Perform collision step: Update velocity towards equilibrium
+    float2 equilibrium = CalculateEquilibrium(density, velocity);
+    velocity = (1.0 - viscosity) * velocity + viscosity * equilibrium;
+
+    // Write updated velocity back to buffer
+    velocityBuffer[index] = velocity;
+
+    // Perform streaming step to neighboring cells
+    StreamToNeighbors(id, velocity);
+}
+
+// Calculate the equilibrium distribution for LBM
+float2 CalculateEquilibrium(float density, float2 velocity)
+{
+    float uSquared = dot(velocity, velocity);
+    return density * float2(1.0 + 3.0 * velocity.x - 1.5 * uSquared, 0.0); // Simplified
+}
+
+// Stream velocity to neighboring cells in the x direction
+void StreamToNeighbors(uint2 id, float2 velocity)
+{
+    uint2 neighbor = id + uint2(1, 0); // Stream to the right
+    if (neighbor.x < gridSize)
+    {
+        int neighborIndex = neighbor.x + neighbor.y * gridSize;
+        velocityBuffer[neighborIndex] = velocity;
+    }
+}
